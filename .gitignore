@@ -1,0 +1,10 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs/CandyCli/CopilotIndices/17.14.1601.40145
+/.vs/CandyCli/FileContentIndex
+/.vs/CandyCli/v17
+/.vs
+/CandyCli/bin/Debug/net8.0
+/CandyCli/obj
