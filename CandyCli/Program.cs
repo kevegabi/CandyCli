@@ -314,18 +314,17 @@ namespace CandyCli
         private static void PrintUsage()
         {
             Console.WriteLine("Usage (order does not matter):");
-            Console.WriteLine("  --ip:<x.x.x.x>           IPv4 or IPv6 address of the device");
-            Console.WriteLine("  --func:<getkey|decryptkey|<method>>   function to execute (required)");
-            Console.WriteLine("  --key:<your-key>         key string used for decryption (optional, required for some funcs)");
-            Console.WriteLine("  --enctext:<hexstring>    encrypted hex text (required for func:decryptkey)");
-            Console.WriteLine("  --extraparam:<string>    extra query parameters to append to the request (optional)");
+            Console.WriteLine("  --ip=<x.x.x.x>           IPv4 or IPv6 address of the device");
+            Console.WriteLine("  --func=<getkey|decryptkey|<method>>   function to execute (required)");
+            Console.WriteLine("  --key=<your-key>         key string used for decryption (optional, required for some funcs)");
+            Console.WriteLine("  --enctext=<hexstring>    encrypted hex text (required for func:decryptkey)");
+            Console.WriteLine("  --extraparam=<string>    extra query parameters to append to the request (optional)");
             Console.WriteLine("");
             Console.WriteLine("Examples:");
-            Console.WriteLine("  candycli --ip:192.168.1.10 --func:getkey");
-            Console.WriteLine("  candycli --func:decryptkey --enctext:0123abcd...    (note: use '=' when calling)");
-            Console.WriteLine("  candycli --ip:192.168.1.10 --func:read --key:MyKey --extraparam:param1=1");
+            Console.WriteLine("  candycli --ip=192.168.1.10 --func=getkey");
+            Console.WriteLine("  candycli --func=decryptkey --enctext=0123abcd...    (note: use '=' when calling)");
+            Console.WriteLine("  candycli --ip=192.168.1.10 --func=read --key=MyKey --extraparam='param1=1'");
             Console.WriteLine("");
-            Console.WriteLine("Correct form: use --name=value (e.g. --func=getkey).");
         }
     }
 }
