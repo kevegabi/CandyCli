@@ -1,6 +1,11 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 using System.Text.Json;
 using System.Diagnostics;
+using System.Net;
+using System.Linq;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 
 namespace CandyCli
@@ -13,8 +18,8 @@ namespace CandyCli
         private readonly byte[] _encryptedBytes;
         private const int KeyLen = 16;
         private static readonly string KeyCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        private static readonly HashSet<byte> DecryptedCharsetBytes = Enumerable.Range(32, 95)
-            .Concat(new int[] { 9, 10, 13 }).Select(i => (byte)i).ToHashSet();
+        private static readonly HashSet<byte> DecryptedCharsetBytes = [.. Enumerable.Range(32, 95)
+            .Concat([9, 10, 13]).Select(i => (byte)i)];
 
         public CandyDecoder(string hexResponse)
         {
@@ -160,12 +165,13 @@ namespace CandyCli
         /// <param name="method">The method name used to construct the endpoint path. Determines which resource is accessed on the server.</param>
         /// <param name="port">The port number to use for the HTTP request. Defaults to 80 if not specified.</param>
         /// <returns>A string containing the response body from the server. Returns an empty string if the request fails.</returns>
-        public static async Task<string> GetResponseAsync(string ip, string method, string extraParams = "", int port = 80)
+        public static async Task<string> GetResponseAsync(string ip, string method, string extraParams = "")
         {
+            Console.WriteLine($"Sending request to http://{ip}/http-{method}.json?encrypted=1&{extraParams}");
             using var client = new HttpClient();
             try
             {
-                string url = $"http://{ip}/http-{method}.json?encrypted=1"; // Ide írd a végpontot
+                string url = $"http://{ip}/http-{method}.json?encrypted=1&{extraParams}";
 
                 // GET kérés elküldése és a válasz beolvasása stringként
                 string responseBody = await client.GetStringAsync(url);
@@ -173,7 +179,7 @@ namespace CandyCli
             }
             catch (HttpRequestException e)
             {
-                return "";
+                return string.Empty;
             }
         }
     }
@@ -181,30 +187,66 @@ namespace CandyCli
 
     /// <summary>
     /// CandyCli - Easy to use .NET solution for Candy appliance (original idea: https://github.com/MelvinGr/CandySimplyFi-tool)
-    /// 
     /// </summary>
     public static class Program
     {
         public static async Task Main(string[] args)
         {
             Console.WriteLine("Candy Simply-Fi Async Client - https://github.com/kevegabi/CandyCli");
-            if (args.Length != 2 && args.Length != 3)
+
+            if (args.Length == 0)
             {
-                Console.WriteLine("Usage:");
-                Console.WriteLine("candycli <ip> getkey - get the encryptionKey from the device, using bruteforce algorithm");
-                Console.WriteLine("candycli <ip> decryptkey <encrypted-result> - get the encryptionKey from the device, using bruteforce algorithm");
-                Console.WriteLine("candycli <ip> <key> <method> <extraPArams> - get status from device (method: read, write)");
+                PrintUsage();
                 return;
             }
 
-            switch (args[1])
+            // Parse parameters of form --name=value (order independent)
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var arg in args)
+            {
+                if (string.IsNullOrWhiteSpace(arg)) continue;
+
+                if (arg.StartsWith("--"))
+                {
+                    int idx = arg.IndexOf('=');
+                    if (idx > 2 && idx < arg.Length - 1)
+                    {
+                        string name = arg.Substring(2, idx - 2).ToLowerInvariant();
+                        string value = arg.Substring(idx + 1);
+                        parameters[name] = value;
+                    }
+                    else
+                    {
+                        // allow --flag without value treated as empty string
+                        string name = arg.Substring(2).ToLowerInvariant();
+                        parameters[name] = string.Empty;
+                    }
+                }
+            }
+
+            if (!parameters.TryGetValue("func", out var func) || string.IsNullOrWhiteSpace(func))
+            {
+                Console.WriteLine("Error: --func parameter is required.");
+                PrintUsage();
+                return;
+            }
+
+            func = func.ToLowerInvariant();
+
+            switch (func)
             {
                 case "getkey":
                     {
-                        string ip = args[0];
+                        if (!parameters.TryGetValue("ip", out var ip) || string.IsNullOrWhiteSpace(ip) || !IPAddress.TryParse(ip, out _))
+                        {
+                            Console.WriteLine("Error: valid --ip is required for func:getkey.");
+                            return;
+                        }
+
+                        Console.WriteLine("Getting encrypted data from the device and starting brute-force key search...");
                         var hex = await CandyHttpClient.GetResponseAsync(ip, "read");
 
-                        if (hex.Length == 0)
+                        if (string.IsNullOrEmpty(hex))
                         {
                             Console.WriteLine("Error: No data returned");
                             return;
@@ -217,15 +259,16 @@ namespace CandyCli
                             : $"Found key: {decrypted.Value.Key}\nDecrypted JSON:\n{decrypted.Value.DecryptedJson}");
                         break;
                     }
+
                 case "decryptkey":
                     {
-                        string ip = args[0];
-                        string hex = args[2];
-                        if (hex.Length == 0)
+                        if (!parameters.TryGetValue("enctext", out var hex) || string.IsNullOrWhiteSpace(hex))
                         {
-                            Console.WriteLine("Error: No data returned");
+                            Console.WriteLine("Error: --enctext is required for func:decryptkey.");
                             return;
                         }
+
+                        Console.WriteLine("Starting brute-force key search with provided encrypted data...");
                         CandyDecoder decoder = new(hex);
                         var decrypted = decoder.BruteForceParallel();
                         Console.WriteLine(!decrypted.HasValue
@@ -233,20 +276,56 @@ namespace CandyCli
                             : $"Found key: {decrypted.Value.Key}\nDecrypted JSON:\n{decrypted.Value.DecryptedJson}");
                         break;
                     }
+
                 default:
                     {
-                        string ip = args[0];
-                        string key = args[1];
-                        string method = args[2];
-                        string extraParams = args[3];
+                        if (!parameters.TryGetValue("ip", out var ip) || string.IsNullOrWhiteSpace(ip) || !IPAddress.TryParse(ip, out _))
+                        {
+                            Console.WriteLine("Error: valid --ip is required for func:{0}.", func);
+                            return;
+                        }
 
-                        string encryptedResult = await CandyHttpClient.GetResponseAsync(ip, method, extraParams);
-                        CandyDecoder decoder = new(encryptedResult);
-                        var result = decoder.DecryptWithKey(Encoding.UTF8.GetBytes(key));
-                        Console.WriteLine(Encoding.UTF8.GetString(result));
+                        parameters.TryGetValue("key", out var key);
+                        parameters.TryGetValue("extraparam", out var extraParam);
+
+                        string encryptedResult = await CandyHttpClient.GetResponseAsync(ip, func, extraParam ?? "");
+                        if (string.IsNullOrEmpty(encryptedResult))
+                        {
+                            Console.WriteLine("Error: No data returned");
+                            return;
+                        }
+
+                        if (!string.IsNullOrEmpty(key))
+                        {
+                            CandyDecoder decoder = new(encryptedResult);
+                            var result = decoder.DecryptWithKey(Encoding.UTF8.GetBytes(key));
+                            Console.WriteLine(Encoding.UTF8.GetString(result));
+                        }
+                        else
+                        {
+                            Console.WriteLine("Response (encrypted):");
+                            Console.WriteLine(encryptedResult);
+                        }
                         break;
                     }
             }
+        }
+
+        private static void PrintUsage()
+        {
+            Console.WriteLine("Usage (order does not matter):");
+            Console.WriteLine("  --ip:<x.x.x.x>           IPv4 or IPv6 address of the device");
+            Console.WriteLine("  --func:<getkey|decryptkey|<method>>   function to execute (required)");
+            Console.WriteLine("  --key:<your-key>         key string used for decryption (optional, required for some funcs)");
+            Console.WriteLine("  --enctext:<hexstring>    encrypted hex text (required for func:decryptkey)");
+            Console.WriteLine("  --extraparam:<string>    extra query parameters to append to the request (optional)");
+            Console.WriteLine("");
+            Console.WriteLine("Examples:");
+            Console.WriteLine("  candycli --ip:192.168.1.10 --func:getkey");
+            Console.WriteLine("  candycli --func:decryptkey --enctext:0123abcd...    (note: use '=' when calling)");
+            Console.WriteLine("  candycli --ip:192.168.1.10 --func:read --key:MyKey --extraparam:param1=1");
+            Console.WriteLine("");
+            Console.WriteLine("Correct form: use --name=value (e.g. --func=getkey).");
         }
     }
 }
