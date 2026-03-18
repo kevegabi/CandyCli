@@ -1,11 +1,7 @@
-﻿using System;
+﻿using System.Diagnostics;
+using System.Net;
 using System.Text;
 using System.Text.Json;
-using System.Diagnostics;
-using System.Net;
-using System.Linq;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 
 namespace CandyCli
@@ -288,7 +284,7 @@ namespace CandyCli
                         parameters.TryGetValue("key", out var key);
                         parameters.TryGetValue("extraparam", out var extraParam);
 
-                        string encryptedResult = await CandyHttpClient.GetResponseAsync(ip, func, extraParam ?? "");
+                        string encryptedResult = await CandyHttpClient.GetResponseAsync(ip, func, extraParam ?? string.Empty);
                         if (string.IsNullOrEmpty(encryptedResult))
                         {
                             Console.WriteLine("Error: No data returned");
